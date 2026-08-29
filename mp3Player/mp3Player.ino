@@ -143,7 +143,6 @@ enum Screen {
     SCREEN_NOW_PLAYING,
     SCREEN_PLAYLISTS,
     SCREEN_SONGS,
-    SCREEN_ARTISTS,
     SCREEN_BLUETOOTH,
     SCREEN_SETTINGS,
     SCREEN_BLUETOOTH_SAVED,
@@ -170,9 +169,9 @@ Screen openSelectedBluetooth();
 
 const char* menuItems[] = {
   "Now Playing",
-  "Playlists",
+  "Shuffle",
   "Songs",
-  "Artists",
+  "Playlists",
   "Bluetooth",
   "Settings"
 };
@@ -189,7 +188,6 @@ const int menuCount = sizeof(menuItems) / sizeof(menuItems[0]);
 const int blueMenuCount = sizeof(bluetoothItems) / sizeof(bluetoothItems[0]);
 int selectedMenu = 0;
 int selectedPlaylist = 0;
-int selectedArtist = 0;
 int selectedBluetooth = 0;
 int connectedBluetoothDevice = -1;
 int currentSongIndex = -1;
@@ -205,6 +203,8 @@ void setup() {
 
     Serial.println();
     Serial.println("=== ESP32 Feather V2 MP3 Player ===");
+
+    randomSeed(esp_random());
 
     pinMode(BTN_CENTER, INPUT_PULLUP);
     pinMode(BTN_DOWN,   INPUT_PULLUP);
@@ -328,6 +328,11 @@ void loop() {
 }
 
 void drawCurrentScreen() {
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0, 4);
+
     switch (currentScreen) {
         case SCREEN_MAIN:
             drawMenu();
@@ -340,9 +345,6 @@ void drawCurrentScreen() {
             break;
         case SCREEN_SONGS:
             drawSongs();
-            break;
-        case SCREEN_ARTISTS:
-            drawArtists();
             break;
         case SCREEN_BLUETOOTH:
             drawBluetooth();
@@ -357,15 +359,14 @@ void drawCurrentScreen() {
             drawBluetoothScan();
             break;
     }
-    display.clearDisplay();
-    display.setTextSize(1);
-    display.setTextColor(SSD1306_WHITE);
-    display.setCursor(0, 4);
+    
     // Volume bar
     int volBarW = 128;
     display.drawRect(0, 13, volBarW, 3, SSD1306_WHITE);
     int fillW = (int)(volBarW * currentVolume);
     display.fillRect(0, 13, fillW, 3, SSD1306_WHITE);
+
+    display.display();
 }
 
 void drawNowPlaying() {
@@ -389,7 +390,6 @@ void drawNowPlaying() {
         display.println("Up next:");
         display.setCursor(0, listTop + rowHeight);
         display.println("(queue empty)");
-        display.display();
         return;
     }
 
@@ -480,15 +480,11 @@ void drawNowPlaying() {
         int thumbY = barY + ((barH - thumbH) * selectedListPos) / (totalItems - 1);
         display.fillRect(barX, thumbY, 3, thumbH, SSD1306_WHITE);
     }
-
-    display.display();
 }
 
 
 void drawPlaylists() {
     display.println("Playlists");
-    
-    display.display();
 }
 
 void drawSongs() {
@@ -583,14 +579,6 @@ void drawSongs() {
         
         display.fillRect(barX, thumbY, 3, thumbH, SSD1306_WHITE);
     }
-
-    display.display();
-}
-
-void drawArtists() {
-    display.println("Artists");
-    
-    display.display();
 }
 
 
@@ -650,8 +638,6 @@ void drawBluetooth() {
         
         display.fillRect(barX, thumbY, 3, thumbH, SSD1306_WHITE);
     }
-
-    display.display();
 }
 
 void drawBluetoothSaved() {
@@ -700,8 +686,6 @@ void drawBluetoothSaved() {
         
         display.fillRect(barX, thumbY, 3, thumbH, SSD1306_WHITE);
     }
-
-    display.display();
 }
 
 void drawBluetoothScan() {
@@ -716,7 +700,6 @@ void drawBluetoothScan() {
             display.println("Scanning...");
             display.setCursor(0, firstMenuY);
             display.println("Please wait (~5s)");
-            display.display();
             // Perform blocking scan then transition to DONE
             startBluetoothScan();
             scanState = SCAN_DONE;
@@ -758,8 +741,6 @@ void drawBluetoothScan() {
             }
             break;
     }
-
-    display.display();
 }
 
 void startBluetoothScan() {
@@ -942,20 +923,18 @@ void drawMenu() {
     
     display.fillRect(barX, thumbY, 3, thumbH, SSD1306_WHITE);
   }
-
-  display.display();
 }
 
 Screen openSelectedMenu() {
     switch (selectedMenu) {
-        case 0: selectedQueue = 0; return SCREEN_NOW_PLAYING;
-        case 1: return SCREEN_PLAYLISTS;
-        case 2: songSelectTime = millis(); scrollOffset = 0; return SCREEN_SONGS;
-        case 3: return SCREEN_ARTISTS;
-        case 4: return SCREEN_BLUETOOTH;
-        case 5: return SCREEN_SETTINGS;
-        default: return SCREEN_MAIN;
+        case 0: selectedQueue = 0; return SCREEN_NOW_PLAYING;                    // Now Playing
+        case 1: shuffleQueue(); selectedQueue = 0; return SCREEN_NOW_PLAYING;    // Shuffle
+        case 2: songSelectTime = millis(); scrollOffset = 0; return SCREEN_SONGS; // Songs
+        case 3: return SCREEN_PLAYLISTS;                                          // Playlists
+        case 4: return SCREEN_BLUETOOTH;                                          // Bluetooth
+        case 5: return SCREEN_SETTINGS;                                           // Settings
     }
+    return SCREEN_MAIN;
 }
 
 Screen openSelectedBluetooth() {
@@ -1094,4 +1073,29 @@ void playFromQueue(int qi) {
 
     // keep selection valid
     if (selectedQueue >= queueCount) selectedQueue = queueCount > 0 ? queueCount - 1 : 0;
+}
+
+void shuffleQueue() {
+    queueHead = 0;
+    queueCount = 0;
+    selectedQueue = 0;
+
+    int order[MAX_SONGS];
+    for (int i = 0; i <  songCount && i < MAX_QUEUE; i++) order[i] = i;
+
+    // Fisher-Yates randomisation
+    for (int i = songCount - 1; i > 0; i--) {
+        int j = random(i + 1);
+        int tmp = order[i];
+        order[i] = order[j];
+        order[j] = tmp;
+    }
+
+    for (int i=0; i < songCount && i < MAX_QUEUE; i++) {
+        queue[queueHead] = String(songPaths[order[i]]);
+        queueHead = (queueHead + 1) % MAX_QUEUE;
+        queueCount++;
+    }
+
+    playNextInQueue();
 }
