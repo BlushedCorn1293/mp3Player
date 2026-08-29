@@ -7,7 +7,6 @@
 #include <BLEDevice.h>
 #include <BLEScan.h>
 #include <BLEAdvertisedDevice.h>
-#include <driver/i2s_std.h>
 
 // OLED
 #define SCREEN_WIDTH 128
@@ -49,7 +48,6 @@
 #define MAX_SCAN_DEVICES 20
 
 
-i2s_chan_handle_t tx_handle;
 
 struct BleDevice {
     String name;
@@ -102,6 +100,13 @@ void checkPosition(){
 }
 int lastRotary = 0;
 unsigned long lastInputTime = 0;
+
+unsigned long lastScrollTime = 0;
+unsigned long songSelectTime = 0;
+int scrollStartDelay = 500;
+int scrollOffset = 0;
+const int scrollSpeed = 15; // lower is faster
+const int scrollGap = 30; // gap between end and start of scrolling text
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
@@ -246,55 +251,6 @@ void setup() {
     }
     display.display();
 
-    Serial.println("PCM5100 I2S Test Starting...");
-
-    // Create I2S channel
-    i2s_chan_config_t chan_cfg =
-        I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
-
-    ESP_ERROR_CHECK(i2s_new_channel(&chan_cfg, &tx_handle, NULL));
-
-    // Clock (44.1kHz audio)
-    i2s_std_clk_config_t clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(44100);
-
-    // Slot config (stereo 16-bit)
-    i2s_std_slot_config_t slot_cfg = {
-        .data_bit_width = I2S_DATA_BIT_WIDTH_16BIT,
-        .slot_bit_width = I2S_SLOT_BIT_WIDTH_16BIT,
-        .slot_mode = I2S_SLOT_MODE_STEREO,
-        .slot_mask = I2S_STD_SLOT_BOTH,
-        .ws_width = I2S_DATA_BIT_WIDTH_16BIT,
-        .ws_pol = false,
-        .bit_shift = true
-    };
-
-    // GPIO mapping
-    i2s_std_gpio_config_t gpio_cfg = {
-        .mclk = I2S_GPIO_UNUSED,
-        .bclk = (gpio_num_t)I2S_BCLK,
-        .ws   = (gpio_num_t)I2S_WS,
-        .dout = (gpio_num_t)I2S_DOUT,
-        .din  = I2S_GPIO_UNUSED,
-        .invert_flags = {
-        .mclk_inv = false,
-        .bclk_inv = false,
-        .ws_inv = false
-        }
-    };
-
-    // Combine config
-    i2s_std_config_t std_cfg = {
-        .clk_cfg = clk_cfg,
-        .slot_cfg = slot_cfg,
-        .gpio_cfg = gpio_cfg
-    };
-
-    ESP_ERROR_CHECK(i2s_channel_init_std_mode(tx_handle, &std_cfg));
-    ESP_ERROR_CHECK(i2s_channel_enable(tx_handle));
-
-    Serial.println("I2S started");
-    display.println("I2S started");
-    display.display();
     delay(3000);
 }
 
@@ -370,23 +326,66 @@ void drawSongs() {
         startIndex = 0;
     }
 
+    
+
     for (int row = 0; row < visibleRows; row++) {
         int itemIndex = startIndex + row;
-        
+
         if (itemIndex >= songCount) {
             break;
         }
 
+        int xStart = (itemIndex == selectedSong) ? 3 : 0;
+        int maxWidth = 116-xStart;
+        String name = songNames[itemIndex];
+        int16_t x1, y1;
+        uint16_t w, h;
+        display.getTextBounds(name, 0, 0, &x1, &y1, &w, &h);
+        
         int y = firstMenuY + row * rowHeight;
 
         if (itemIndex == selectedSong) {
             display.drawRect(0, y-1, 118, 10, SSD1306_WHITE);
-            display.setCursor(3, y);
+        } 
+
+        display.setTextWrap(false);
+
+        if (itemIndex == selectedSong && w > maxWidth) {
+
+            if (millis() - songSelectTime > scrollStartDelay) {
+                if (millis() - lastScrollTime > scrollSpeed) {
+                    scrollOffset++;
+                    lastScrollTime = millis();
+                }
+            }
+
+            int span = w + scrollGap;
+            if (scrollOffset >= span) scrollOffset = 0;
+
+            for (int pass=0; pass < 2; pass++) {
+                int cx = xStart - scrollOffset + pass * span;
+                for (int i = 0; i < (int)name.length(); i++) {
+                    char c = name[i];
+                    int16_t cbx, cby;
+                    uint16_t cw, ch;
+                    display.getTextBounds(String(c), 0, 0, &cbx, &cby, &cw, &ch);
+                    if (cx + int(cw) > xStart && cx < xStart + maxWidth) {
+                        display.setCursor(cx, y);
+                        display.print(c);
+                    }
+                    cx += cw;
+                }
+            }
+
         } else {
-            display.setCursor(0, y);
+            while (w > maxWidth && name.length() > 1) {
+                name = name.substring(0, name.length() - 1);
+                display.getTextBounds(name, 0, 0, &x1, &y1, &w, &h);
+            }
+            display.setCursor(xStart, y);
+            display.print(name);
         }
 
-        display.println(songNames[itemIndex]);
     }
 
     if (songCount > visibleRows) {
@@ -669,7 +668,12 @@ void handleInput() {
         Serial.println(moveDirection);
         switch (currentScreen) {
             case SCREEN_MAIN: moveSelection(selectedMenu, menuCount, moveDirection); break;
-            case SCREEN_SONGS: moveSelection(selectedSong, songCount, moveDirection); break;
+            case SCREEN_SONGS: 
+                moveSelection(selectedSong, songCount, moveDirection); 
+                scrollOffset = 0;
+                lastScrollTime = now;
+                songSelectTime = now;
+                break;
             case SCREEN_BLUETOOTH: moveSelection(selectedBluetooth, blueMenuCount, moveDirection); break;
             case SCREEN_BLUETOOTH_SAVED: moveSelection(selectedSaved, devicesCount, moveDirection); break;
             case SCREEN_BLUETOOTH_SCAN: if (scanState == SCAN_DONE) moveSelection(selectedScanResult, scanCount, moveDirection); break;
@@ -750,7 +754,7 @@ Screen openSelectedMenu() {
     switch (selectedMenu) {
         case 0: return SCREEN_NOW_PLAYING;
         case 1: return SCREEN_PLAYLISTS;
-        case 2: return SCREEN_SONGS;
+        case 2: songSelectTime = millis(); scrollOffset = 0; return SCREEN_SONGS;
         case 3: return SCREEN_ARTISTS;
         case 4: return SCREEN_BLUETOOTH;
         case 5: return SCREEN_SETTINGS;
