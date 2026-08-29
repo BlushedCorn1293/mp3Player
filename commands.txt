@@ -6,6 +6,9 @@ arduino-cli upload -p /dev/ttyACM0 --fqbn esp32:esp32:adafruit_feather_esp32_v2 
 arduino-cli monitor -p /dev/ttyACM0 -c baudrate=115200
 
 
+
+
 arduino-cli compile --fqbn esp32:esp32:adafruit_feather_esp32_v2 .
+
 arduino-cli upload -p COM10 --fqbn esp32:esp32:adafruit_feather_esp32_v2 .
 arduino-cli monitor -p COM10 -c baudrate=115200 -c rts=off -c dtr=off
