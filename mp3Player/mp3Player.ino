@@ -804,6 +804,7 @@ void handleInput() {
             switch (currentScreen) {
                 case SCREEN_SONGS:
                     addToQueue(songPaths[selectedSong]);
+                    if (!isPlaying) playNextInQueue();
                     break;
                 case SCREEN_NOW_PLAYING:
                     playNextInQueue();
@@ -1038,10 +1039,6 @@ void addToQueue(const char* path) {
     queueCount++;
     Serial.print("Added to queue: ");
     Serial.println(path);
-
-    if (queueCount == 1) {
-        playNextInQueue();
-    }
 }
 
 void playNextInQueue() {
@@ -1080,11 +1077,14 @@ void shuffleQueue() {
     queueCount = 0;
     selectedQueue = 0;
 
+    int n = songCount;
+    if (n > MAX_QUEUE) n = MAX_QUEUE;
+
     int order[MAX_SONGS];
     for (int i = 0; i <  songCount && i < MAX_QUEUE; i++) order[i] = i;
 
     // Fisher-Yates randomisation
-    for (int i = songCount - 1; i > 0; i--) {
+    for (int i = n - 1; i > 0; i--) {
         int j = random(i + 1);
         int tmp = order[i];
         order[i] = order[j];
