@@ -68,8 +68,8 @@ vcpkg_installed/
 Testing/
 .cache/
 
-echo "batteryTest/" >> .gitignore
-echo "testDAC/" >> .gitignore
-echo "testEncoder/" >> .gitignore
-echo "testGPIO/" >> .gitignore
-echo "testOled/" >> .gitignore
+batteryTest/
+testDAC/
+testEncoder/
+testGPIO/
+testOled/
