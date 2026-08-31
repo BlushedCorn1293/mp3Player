@@ -1077,21 +1077,21 @@ void shuffleQueue() {
     queueCount = 0;
     selectedQueue = 0;
 
-    int n = songCount;
-    if (n > MAX_QUEUE) n = MAX_QUEUE;
+    int total = songCount;
+    if (total > MAX_SONGS) total = MAX_SONGS;
 
     int order[MAX_SONGS];
-    for (int i = 0; i <  songCount && i < MAX_QUEUE; i++) order[i] = i;
+    for (int i = 0; i <  total; i++) order[i] = i;
 
     // Fisher-Yates randomisation
-    for (int i = n - 1; i > 0; i--) {
+    for (int i = total - 1; i > 0; i--) {
         int j = random(i + 1);
         int tmp = order[i];
         order[i] = order[j];
         order[j] = tmp;
     }
 
-    for (int i=0; i < songCount && i < MAX_QUEUE; i++) {
+    for (int i = 0; i < total && i < MAX_QUEUE; i++) {
         queue[queueHead] = String(songPaths[order[i]]);
         queueHead = (queueHead + 1) % MAX_QUEUE;
         queueCount++;
