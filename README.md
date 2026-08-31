@@ -1,6 +1,6 @@
 # ESP32 MP3 Player
 
-A portable MP3 player built on the Adafruit ESP32 Feather V2. It plays MP3 files from an SD card through an I2S DAC, with an OLED interface driven by a rotary encoder and five buttons. Includes a play queue, shuffle, and a (work-in-progress) Bluetooth output.
+A portable MP3 player built on the Adafruit ESP32 Feather V2. Audio output is through an AUX jack on the bottom of the device (can me seen in images/Now Playing.jpg). It plays MP3 files from an SD card through an I2S DAC, with an OLED interface driven by a rotary encoder and five buttons. Includes a play queue, shuffle, and a (work-in-progress) Bluetooth output.
 
 ![MP3 player, left view](images/Left.jpg)
 
